@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Irrigation Vault Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #34495e;
+            --accent: #3498db;
+            --danger: #e74c3c;
+            --success: #2ecc71;
+            --warning: #e67e22;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --border: #e9ecef;
+            --text: #333333;
+            --text-light: #6c757d;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        body { background-color: var(--bg); color: var(--text); padding: 10px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Main Layout Grid */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 2fr 180px 1.5fr; 
+            gap: 15px;
+            flex: 1;
+            min-height: 0;
+        }
+        
+        /* Panels */
+        .panel {
+            background: var(--card-bg);
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .panel-header {
+            background: var(--primary);
+            color: white;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        /* Canvas Area */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background-color: #f1f3f5;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas#mechanism { width: 100%; height: 100%; touch-action: none; cursor: grab; }
+        canvas#mechanism:active { cursor: grabbing; }
+        
+        /* Center Column Metrics */
+        .metrics-column {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            height: 100%;
+            overflow-y: auto;
+            padding-right: 5px; 
+        }
+        .metric-card {
+            background: var(--card-bg);
+            border-radius: 6px;
+            padding: 10px 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .metric-title { font-size: 0.75rem; color: var(--text-light); font-weight: 600; text-transform: uppercase; margin-bottom: 4px; line-height: 1.1; }
+        .metric-value { font-size: 1.15rem; font-weight: bold; color: var(--primary); }
+        .metric-sub { font-size: 0.7rem; color: var(--text-light); margin-top: 4px; line-height: 1.2; }
+        
+        .editable-metric {
+            width: 100%;
+            max-width: 90px;
+            text-align: center;
+            font-size: 1.15rem;
+            font-weight: bold;
+            color: var(--primary);
+            border: 1px dashed var(--accent);
+            border-radius: 4px;
+            padding: 2px;
+            background: #fdfdfe;
+            outline: none;
+        }
+        .editable-metric:focus { border: 1px solid var(--accent); box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2); }
+
+        .status-ok .metric-value, .status-ok .editable-metric { color: var(--success); }
+        .status-warn .metric-value { color: var(--warning); }
+        .status-error { border-color: var(--danger); background-color: #fdf2f0; }
+        .status-error .metric-value, .status-error .editable-metric { color: var(--danger); }
+        
+        /* New Limits Section */
+        .limits-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            width: 100%;
+        }
+        .limit-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.9);
+        }
+        .limit-input {
+            width: 45px;
+            font-size: 0.75rem;
+            padding: 1px 2px;
+            text-align: right;
+            border-radius: 3px;
+            border: none;
+        }
+        
+        /* Right Column Setup */
+        .right-column { display: flex; flex-direction: column; gap: 15px; height: 100%; min-height: 0; }
+        
+        .chart-panel { flex: 0 0 45%; min-height: 200px; display: flex; flex-direction: column; }
+        .chart-container { flex: 1; padding: 5px; position: relative; min-height: 0; }
+        
+        .params-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .controls-grid { padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        
+        .control-group { display: flex; flex-direction: column; margin-bottom: 2px; }
+        .control-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .control-label { font-size: 0.8rem; font-weight: 600; color: var(--secondary); }
+        
+        .control-inputs { display: flex; align-items: center; gap: 8px; }
+        input[type="range"] { flex: 1; accent-color: var(--accent); height: 16px; margin: 0; }
+        input[type="number"] {
+            width: 70px;
+            padding: 2px 4px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            text-align: right;
+            color: var(--text);
+        }
+
+        /* Angle Controls in Header */
+        .angle-controls { display: flex; flex: 1; margin-left: 1rem; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; }
+        .angle-controls label { font-size: 0.8rem; margin: 0; color: white; }
+        .angle-controls input[type="range"] { width: 100px; height: 10px; }
+        .angle-controls input[type="number"] { width: 55px; font-size: 0.8rem; font-weight: bold; padding: 1px 4px; }
+        
+        /* Buttons */
+        #btn_reset_view {
+            position: absolute; 
+            bottom: 10px; 
+            right: 10px; 
+            padding: 6px 10px; 
+            font-size: 0.75rem; 
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            opacity: 0.7; 
+            transition: opacity 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        #btn_reset_view:hover { opacity: 1; }
+
+        .btn-export {
+            padding: 8px 16px; 
+            background: var(--success); 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            font-weight: bold; 
+            font-size: 0.85rem;
+            cursor: pointer; 
+            transition: background 0.2s;
+            width: 100%;
+        }
+        .btn-export:hover {
+            background: #27ae60;
+        }
+        .export-container {
+            padding: 12px;
+            border-top: 1px solid var(--border);
+            background: #fdfdfe;
+        }
+        
+        /* Responsive */
+        @media (max-width: 900px) {
+            body { overflow: auto; }
+            .dashboard { grid-template-columns: 1fr; height: auto; display: flex; flex-direction: column; }
+            .right-column { flex: unset; }
+            .metrics-column { flex-direction: row; flex-wrap: wrap; height: auto; overflow-x: auto; }
+            .metric-card { min-width: 150px; flex: 1; }
+            .chart-panel { height: 300px; flex: unset; }
+            .params-panel { height: auto; flex: unset; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <!-- Left Panel: 2D Mechanism -->
+        <div class="panel" style="flex: 1;">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>2D Mechanism</span>
+                <div class="angle-controls">
+                    <label for="param_angle">Angle:</label>
+                    <input type="range" id="param_angle" min="0" max="92" step="0.5" value="0">
+                    <input type="number" id="num_angle" value="0" step="0.5" min="0" max="92">
+                </div>
+            </div>
+            <div class="canvas-container">
+                <canvas id="mechanism"></canvas>
+                <button id="btn_reset_view">Reset View</button>
+            </div>
+        </div>
+
+        <!-- Center Column: Vertical Metrics -->
+        <div class="metrics-column">
+            <!-- User Assist -->
+            <div class="metric-card" id="card_handle_force">
+                <div class="metric-title">User Assist at <span id="current_angle_disp">0</span>&deg;</div>
+                <div class="metric-value" id="out_handle_force">-- lbs</div>
+                <div class="metric-sub" id="out_handle_desc">Force applied at edge</div>
+            </div>
+            
+            <div class="metric-card" id="card_strut_force">
+                <div class="metric-title">Strut Rating (N)</div>
+                <input type="number" id="quick_rated_force" class="editable-metric" value="900" step="50" title="Edit Strut Rated Force">
+                <div class="metric-sub" id="req_force_container" title="Force needed to hold lid at current angle">Req for equilibrium:<br><span id="val_req_force" style="font-weight:bold;">--</span> N</div>
+            </div>
+            
+            <div class="metric-card" id="card_length">
+                <div class="metric-title">Strut Length</div>
+                <div class="metric-value" id="out_length">-- mm</div>
+                <div class="metric-sub">Min: <span id="val_min_len">--</span><br>Max: <span id="val_max_len">--</span></div>
+            </div>
+            
+            <div class="metric-card" id="card_stroke">
+                <div class="metric-title">Current Stroke</div>
+                <div class="metric-value" id="out_stroke">-- mm</div>
+                <div class="metric-sub">Max allowed: 420 mm</div>
+            </div>
+            
+            <!-- System Status block with limit parameters -->
+            <div class="metric-card" id="card_status" style="background: var(--primary); color: white; border: none; padding: 10px 8px;">
+                <div class="metric-title" style="color: rgba(255,255,255,0.7); margin-bottom: 5px;">System Status</div>
+                <div class="metric-value" id="out_status" style="color: white; font-size: 0.95rem; line-height: 1.2;">Ready</div>
+                
+                <div class="limits-container">
+                    <div class="limit-row">
+                        <label for="limit_lift" title="Maximum acceptable lifting force (lbs)">Max Lift (lbs):</label>
+                        <input type="number" id="limit_lift" class="limit-input" value="30" min="0" step="1">
+                    </div>
+                    <div class="limit-row">
+                        <label for="limit_pull" title="Maximum acceptable pull-down force (lbs)">Max Pull (lbs):</label>
+                        <input type="number" id="limit_pull" class="limit-input" value="15" min="0" step="1">
+                    </div>
+                    <div class="limit-row">
+                        <label for="limit_max_angle" title="Maximum Opening Angle (°)">Max Angle (°):</label>
+                        <input type="number" id="limit_max_angle" class="limit-input" value="92" min="10" max="120" step="1">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Chart + Parameters -->
+        <div class="right-column">
+            <div class="panel chart-panel">
+                <div class="panel-header">User Assist Curve</div>
+                <div class="chart-container">
+                    <canvas id="forceChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="panel params-panel">
+                <div class="panel-header">Physical Parameters</div>
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Extended Length (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_ext_length" min="600" max="1200" step="1" value="1050">
+                            <input type="number" id="num_ext_length" value="1050">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Hinge Height (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_hinge_h" min="0" max="100" step="0.1" value="9.2">
+                            <input type="number" id="num_hinge_h" value="9.2" step="0.1">
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Rib Depth (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_rib_d" min="0" max="200" step="0.1" value="35.8">
+                            <input type="number" id="num_rib_d" value="35.8" step="0.01">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Lid Mount Fwd (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_lid_x" min="100" max="800" step="1" value="250">
+                            <input type="number" id="num_lid_x" value="250">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Box Mount Fwd (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_box_x" min="0" max="800" step="1" value="25.4">
+                            <input type="number" id="num_box_x" value="25.4" step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Box Mount Depth (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_box_y" min="100" max="1000" step="1" value="650">
+                            <input type="number" id="num_box_y" value="650" step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Lid Mass (kg)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_mass" min="10" max="150" step="1" value="39">
+                            <input type="number" id="num_mass" value="39">
+                        </div>
+                    </div>
+                </div>
+                <div class="export-container">
+                    <button id="btn_export_csv" class="btn-export">Export Data to CSV</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mechanism');
+        const ctx = canvas.getContext('2d');
+        
+        const current_angle_disp = document.getElementById('current_angle_disp');
+        const out_handle_force = document.getElementById('out_handle_force');
+        const card_handle_force = document.getElementById('card_handle_force');
+        
+        const quick_rated_force = document.getElementById('quick_rated_force');
+        const val_req_force = document.getElementById('val_req_force');
+        const req_force_container = document.getElementById('req_force_container');
+        const card_strut_force = document.getElementById('card_strut_force');
+        
+        const out_length = document.getElementById('out_length');
+        const val_min_len = document.getElementById('val_min_len');
+        const val_max_len = document.getElementById('val_max_len');
+        const card_length = document.getElementById('card_length');
+        
+        const out_stroke = document.getElementById('out_stroke');
+        const card_stroke = document.getElementById('card_stroke');
+        
+        const out_status = document.getElementById('out_status');
+        const card_status = document.getElementById('card_status');
+        
+        const limit_lift = document.getElementById('limit_lift');
+        const limit_pull = document.getElementById('limit_pull');
+        const limit_max_angle = document.getElementById('limit_max_angle');
+
+        let forceChart = null;
+        
+        const LID_LENGTH = 900;
+        const STROKE_MAX = 420;
+        const STRUT_BUFFER_MM = 12; // Safety distance for gas cylinder body
+        
+        // ------------- Pan & Zoom State -------------
+        let viewTransform = { x: 0, y: 0, k: 1 };
+        let viewInitialized = false;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // Reset View Button
+        document.getElementById('btn_reset_view').addEventListener('click', () => {
+            viewInitialized = false;
+            update();
+        });
+
+        // Mouse Drag / Pan
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = e.clientX - lastMouseX;
+                const dy = e.clientY - lastMouseY;
+                viewTransform.x += dx;
+                viewTransform.y += dy;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                
+                // Fast redraw just for pan (no math recalc)
+                const params = getParams();
+                const angle = parseFloat(document.getElementById('num_angle').value) || 0;
+                const kin = calculateKinematics(angle, params);
+                drawMechanism(ctx, canvas.width, canvas.height, params, kin);
+            }
+        });
+
+        // Mouse Wheel / Zoom
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            const direction = e.deltaY < 0 ? 1 : -1;
+            const factor = Math.pow(zoomFactor, direction);
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Adjust x and y so the point under the mouse remains in the same place
+            viewTransform.x = mouseX - (mouseX - viewTransform.x) * factor;
+            viewTransform.y = mouseY - (mouseY - viewTransform.y) * factor;
+            viewTransform.k *= factor;
+
+            // Fast redraw just for zoom (no math recalc)
+            const params = getParams();
+            const angle = parseFloat(document.getElementById('num_angle').value) || 0;
+            const kin = calculateKinematics(angle, params);
+            drawMechanism(ctx, canvas.width, canvas.height, params, kin);
+        }, { passive: false });
+        // ------------------------------------------
+
+        
+        // Master Sync Function
+        function syncInputs(sliderId, numId) {
+            const slider = document.getElementById(sliderId);
+            const num = document.getElementById(numId);
+            if(slider && num) {
+                slider.addEventListener('input', () => { num.value = slider.value; update(); });
+                num.addEventListener('change', () => { slider.value = num.value; update(); }); 
+                num.addEventListener('input', () => { slider.value = num.value; update(); }); 
+            }
+        }
+        
+        // Quick Force & Limit Sync
+        quick_rated_force.addEventListener('input', () => update());
+        limit_lift.addEventListener('input', () => update());
+        limit_pull.addEventListener('input', () => update());
+        limit_max_angle.addEventListener('input', () => {
+            const maxAng = parseFloat(limit_max_angle.value) || 92;
+            document.getElementById('param_angle').max = maxAng;
+            document.getElementById('num_angle').max = maxAng;
+            if (parseFloat(document.getElementById('num_angle').value) > maxAng) {
+                syncAngle(maxAng);
+            } else {
+                update();
+            }
+        });
+
+        // Angle Sync
+        function syncAngle(val) {
+            let num = parseFloat(val);
+            const maxAng = parseFloat(limit_max_angle.value) || 92;
+            if (isNaN(num)) return;
+            if (num < 0) num = 0;
+            if (num > maxAng) num = maxAng;
+            document.getElementById('param_angle').value = num;
+            document.getElementById('num_angle').value = num;
+            update();
+        }
+        document.getElementById('param_angle').addEventListener('input', (e) => syncAngle(e.target.value));
+        document.getElementById('num_angle').addEventListener('input', (e) => syncAngle(e.target.value));
+        document.getElementById('num_angle').addEventListener('change', (e) => syncAngle(e.target.value));
+
+        // Setup Params
+        syncInputs('param_ext_length', 'num_ext_length');
+        syncInputs('param_hinge_h', 'num_hinge_h');
+        syncInputs('param_rib_d', 'num_rib_d');
+        syncInputs('param_lid_x', 'num_lid_x');
+        syncInputs('param_box_x', 'num_box_x');
+        syncInputs('param_box_y', 'num_box_y');
+        syncInputs('param_mass', 'num_mass');
+
+        function getParams() {
+            return {
+                rated_force: parseFloat(quick_rated_force.value) || 1900,
+                ext_length: parseFloat(document.getElementById('num_ext_length').value),
+                hinge_h: parseFloat(document.getElementById('num_hinge_h').value),
+                rib_d: parseFloat(document.getElementById('num_rib_d').value),
+                lid_x: parseFloat(document.getElementById('num_lid_x').value),
+                box_x: parseFloat(document.getElementById('num_box_x').value),
+                box_y: parseFloat(document.getElementById('num_box_y').value),
+                mass: parseFloat(document.getElementById('num_mass').value)
+            };
+        }
+
+        function calculateKinematics(angle_deg, params) {
+            const theta = angle_deg * (Math.PI / 180);
+            const w_N = params.mass * 9.81;
+            const offset_y = -params.hinge_h - params.rib_d;
+            
+            // Mount coordinate (Lid)
+            const mount_x = params.lid_x * Math.cos(theta) - offset_y * Math.sin(theta);
+            const mount_y = params.lid_x * Math.sin(theta) + offset_y * Math.cos(theta);
+            
+            // Mount coordinate (Box)
+            const box_x = params.box_x;
+            const box_y = -params.hinge_h - params.box_y;
+            
+            // Vector from box to mount
+            const dx = mount_x - box_x;
+            const dy = mount_y - box_y;
+            const strut_length = Math.sqrt(dx*dx + dy*dy);
+            
+            const cg_x = 450 * Math.cos(theta) - (-params.hinge_h) * Math.sin(theta);
+            const gravity_torque = w_N * cg_x;
+            
+            const dir_x = dx / strut_length;
+            const dir_y = dy / strut_length;
+            const lever_arm = mount_x * dir_y - mount_y * dir_x;
+            
+            // Progressive Gas Spring Physics
+            const max_stroke = 420; // STROKE_MAX
+            const current_stroke_used = params.ext_length - strut_length;
+            const compression_pct = Math.max(0, Math.min(1, current_stroke_used / max_stroke));
+            
+            const progression_ratio = 1.3; 
+            const actual_strut_force = params.rated_force * (1 + (compression_pct * (progression_ratio - 1)));
+            
+            const strut_torque = actual_strut_force * lever_arm;
+            const required_rated_force = lever_arm > 0 ? gravity_torque / (lever_arm * (1 + (compression_pct * (progression_ratio - 1)))) : 9999;
+            const user_torque = gravity_torque - strut_torque; 
+            const handle_force_lbs = (user_torque / 900) * 0.224809; 
+            
+            // Lateral Rib Binding Check (with buffer)
+            const rib_local_x = 47.23;
+            const rib_local_y = -65.45; // -Y is down in standard math frame
+            const rib_x = rib_local_x * Math.cos(theta) - rib_local_y * Math.sin(theta);
+            const rib_y = rib_local_x * Math.sin(theta) + rib_local_y * Math.cos(theta);
+
+            const v_rib_x = rib_x - box_x;
+            const v_rib_y = rib_y - box_y;
+            
+            // Cross product to find clearance
+            const rib_cross = v_rib_x * dir_y - v_rib_y * dir_x;
+            const rib_clearance = -rib_cross; 
+            
+            const is_rib_binding = rib_clearance <= 0;
+            const is_rib_warning = !is_rib_binding && (rib_clearance <= STRUT_BUFFER_MM);
+            
+            const is_hinge_binding = lever_arm <= 0;
+            const is_binding = is_rib_binding || is_hinge_binding;
+
+            return { 
+                mount_x, mount_y, box_x, box_y, strut_length, lever_arm, 
+                required_rated_force, handle_force_lbs, 
+                is_binding, is_rib_binding, is_rib_warning, is_hinge_binding, rib_clearance 
+            };
+        }
+
+        function initChart() {
+            // We've added chartjs-plugin-annotation via CDN, allowing zeroLine and ergonomicZone
+            const ctxChart = document.getElementById('forceChart').getContext('2d');
+            forceChart = new Chart(ctxChart, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Assist Force (lbs)',
+                        data: [],
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Current Angle',
+                        data: [],
+                        type: 'scatter',
+                        backgroundColor: '#e74c3c',
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                            callbacks: { 
+                                label: (ctx) => {
+                                    const val = ctx.parsed.y;
+                                    return `${val > 0 ? 'Lift' : 'Pull'}: ${Math.abs(val).toFixed(1)} lbs`;
+                                }
+                            } 
+                        },
+                        title: { display: true, text: 'User Assist Force over Angle Range', font: {size: 11} }
+                    },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Lid Angle (°)', font: {size: 10} }, ticks: {font: {size: 10}} },
+                        y: { title: { display: true, text: 'User Assist (lbs)', font: {size: 10} }, grid: { color: '#e9ecef' }, ticks: {font: {size: 10}} }
+                    }
+                }
+            });
+        }
+
+        function updateChart(params, maxAng, currentAng) {
+            const data = [];
+            let yValues = [];
+            
+            // Build curve
+            for (let a = 0; a <= maxAng; a += 2) {
+                const f = calculateKinematics(a, params).handle_force_lbs;
+                data.push({x: a, y: f});
+                yValues.push(f);
+            }
+            // Ensure end angle is plotted if not a multiple of 2
+            if (data[data.length-1].x !== maxAng) {
+                const f = calculateKinematics(maxAng, params).handle_force_lbs;
+                data.push({x: maxAng, y: f});
+                yValues.push(f);
+            }
+            
+            forceChart.data.datasets[0].data = data;
+            
+            // Build current dot
+            const currentF = calculateKinematics(currentAng, params).handle_force_lbs;
+            forceChart.data.datasets[1].data = [{x: currentAng, y: currentF}];
+            
+            const yMin = Math.min(-20, ...yValues);
+            const yMax = Math.max(30, ...yValues);
+            
+            // Add zero line plugin or annotation dynamically based on data
+            if (!forceChart.options.plugins.annotation) forceChart.options.plugins.annotation = { annotations: {} };
+            forceChart.options.plugins.annotation.annotations.zeroLine = {
+                type: 'line',
+                yMin: 0,
+                yMax: 0,
+                borderColor: 'rgba(0,0,0,0.2)',
+                borderWidth: 1,
+                borderDash: [5, 5]
+            };
+            
+            // Add ergonomic zones based on inputs
+            const maxLift = parseFloat(limit_lift.value) || 30;
+            const maxPull = parseFloat(limit_pull.value) || 15;
+            
+            forceChart.options.plugins.annotation.annotations.ergonomicZone = {
+                type: 'box',
+                yMin: -maxPull,
+                yMax: maxLift,
+                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                borderWidth: 0
+            };
+
+            forceChart.options.scales.y.min = Math.floor(yMin / 10) * 10 - 10;
+            forceChart.options.scales.y.max = Math.ceil(yMax / 10) * 10 + 10;
+            forceChart.update('none');
+        }
+
+        function drawMechanism(ctx, w, h, params, kin) {
+            ctx.clearRect(0, 0, w, h);
+            
+            // Initialize View Transform if reset or first load
+            if (!viewInitialized) {
+                viewTransform.k = Math.min(w / 1200, h / 1600);
+                viewTransform.x = w * 0.15; // 15% from left to give room for hinge
+                viewTransform.y = h * 0.65; // 65% from top 
+                viewInitialized = true;
+            }
+            
+            ctx.save();
+            ctx.translate(viewTransform.x, viewTransform.y);
+            ctx.scale(viewTransform.k, viewTransform.k);
+            
+            const mx = kin.mount_x, my = -kin.mount_y;
+            const bx = kin.box_x, by = -kin.box_y;
+            const base_y = params.hinge_h;
+
+            // 1. Vault Walls
+            ctx.beginPath();
+            ctx.strokeStyle = '#95a5a6';
+            ctx.lineWidth = 4;
+            ctx.moveTo(-100, base_y);
+            ctx.lineTo(950, base_y); // vault floor top
+            ctx.moveTo(0, base_y);
+            ctx.lineTo(0, base_y + params.box_y + 150); // inner wall
+            ctx.stroke();
+            
+            // -- STATIC DIMENSIONS (Box) --
+            ctx.lineWidth = 1;
+            ctx.font = '14px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Box Mount Depth (box_y)
+            const dim_bx = -60;
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(52, 73, 94, 0.4)';
+            ctx.moveTo(0, base_y); ctx.lineTo(dim_bx - 10, base_y);
+            ctx.moveTo(0, by); ctx.lineTo(dim_bx - 10, by);
+            ctx.moveTo(dim_bx, base_y); ctx.lineTo(dim_bx, by);
+            ctx.moveTo(dim_bx - 5, base_y + 5); ctx.lineTo(dim_bx + 5, base_y - 5);
+            ctx.moveTo(dim_bx - 5, by + 5); ctx.lineTo(dim_bx + 5, by - 5);
+            ctx.stroke();
+            
+            ctx.save();
+            ctx.translate(dim_bx - 10, (base_y + by) / 2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillStyle = 'rgba(52, 73, 94, 0.8)';
+            ctx.fillText(`Depth: ${params.box_y} mm`, 0, -8);
+            ctx.restore();
+
+            // Box Mount Fwd (box_x)
+            const dim_by = by + 60;
+            ctx.beginPath();
+            ctx.moveTo(0, by); ctx.lineTo(0, dim_by + 10);
+            ctx.moveTo(bx, by); ctx.lineTo(bx, dim_by + 10);
+            ctx.moveTo(0, dim_by); ctx.lineTo(bx, dim_by);
+            ctx.moveTo(-5, dim_by + 5); ctx.lineTo(5, dim_by - 5);
+            ctx.moveTo(bx - 5, dim_by + 5); ctx.lineTo(bx + 5, dim_by - 5);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(52, 73, 94, 0.8)';
+            ctx.fillText(`Fwd: ${params.box_x} mm`, bx / 2, dim_by + 16);
+
+            // 2. Hinge
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#2c3e50';
+            ctx.fill();
+            
+            // 3. Lid
+            const theta = parseFloat(document.getElementById('num_angle').value) * (Math.PI / 180);
+            ctx.save();
+            ctx.rotate(-theta);
+            const lid_y = params.hinge_h;
+            
+            ctx.beginPath();
+            ctx.rect(0, lid_y, LID_LENGTH, 15);
+            ctx.fillStyle = '#bdc3c7';
+            ctx.fill();
+            ctx.strokeStyle = '#7f8c8d';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            const rib_h = params.rib_d;
+            ctx.beginPath();
+            ctx.rect(params.lid_x - 10, lid_y + 15, 20, rib_h);
+            ctx.fillStyle = '#34495e';
+            ctx.fill();
+
+            // -- MOVING DIMENSIONS (Lid) --
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(52, 73, 94, 0.4)';
+            ctx.fillStyle = 'rgba(52, 73, 94, 0.8)';
+            
+            // Lid Fwd (lid_x)
+            const dim_ly = lid_y - 40;
+            ctx.beginPath();
+            ctx.moveTo(0, lid_y); ctx.lineTo(0, dim_ly - 10);
+            ctx.moveTo(params.lid_x, lid_y); ctx.lineTo(params.lid_x, dim_ly - 10);
+            ctx.moveTo(0, dim_ly); ctx.lineTo(params.lid_x, dim_ly);
+            ctx.moveTo(-5, dim_ly + 5); ctx.lineTo(5, dim_ly - 5);
+            ctx.moveTo(params.lid_x - 5, dim_ly + 5); ctx.lineTo(params.lid_x + 5, dim_ly - 5);
+            ctx.stroke();
+            ctx.fillText(`Lid Fwd: ${params.lid_x} mm`, params.lid_x / 2, dim_ly - 12);
+
+            // Rib Depth
+            const rib_top = lid_y + 15;
+            const rib_bot = rib_top + params.rib_d;
+            const dim_rx = params.lid_x + 40;
+            
+            ctx.beginPath();
+            ctx.moveTo(params.lid_x + 10, rib_top); ctx.lineTo(dim_rx + 10, rib_top);
+            ctx.moveTo(params.lid_x + 10, rib_bot); ctx.lineTo(dim_rx + 10, rib_bot);
+            ctx.moveTo(dim_rx, rib_top); ctx.lineTo(dim_rx, rib_bot);
+            ctx.moveTo(dim_rx - 5, rib_top + 5); ctx.lineTo(dim_rx + 5, rib_top - 5);
+            ctx.moveTo(dim_rx - 5, rib_bot + 5); ctx.lineTo(dim_rx + 5, rib_bot - 5);
+            ctx.stroke();
+            
+            ctx.save();
+            ctx.translate(dim_rx + 10, (rib_top + rib_bot) / 2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillText(`Rib: ${params.rib_d} mm`, 0, -8);
+            ctx.restore();
+
+            // Specific Lateral Rib (47.23 forward, 65.45 down)
+            ctx.beginPath();
+            ctx.moveTo(47.23, 0); // Start at hinge level
+            ctx.lineTo(47.23, 65.45); // Extend down (canvas Y is positive downwards)
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // 12mm Buffer zone around the rib tip
+            ctx.beginPath();
+            ctx.arc(47.23, 65.45, STRUT_BUFFER_MM, 0, Math.PI*2);
+            ctx.strokeStyle = 'rgba(231, 76, 60, 0.4)'; // Light red dashed circle
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Rib tip point
+            ctx.beginPath();
+            ctx.arc(47.23, 65.45, 4, 0, Math.PI*2);
+            ctx.fillStyle = '#c0392b';
+            ctx.fill();
+            
+            ctx.restore();
+            
+            // Prop rod line for Max Angle reference
+            const maxAng = parseFloat(limit_max_angle.value) || 92;
+            ctx.save();
+            ctx.rotate(-maxAng * Math.PI/180);
+            ctx.beginPath();
+            ctx.moveTo(0, lid_y);
+            ctx.lineTo(LID_LENGTH, lid_y);
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
+            ctx.setLineDash([10, 10]);
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+            
+            // 4. Strut
+            const min_len = params.ext_length - STROKE_MAX;
+            const max_len = params.ext_length;
+            let strutColor = '#3498db'; // Default Blue
+            let hasError = false;
+            
+            if (kin.strut_length < min_len || kin.strut_length > max_len || kin.is_binding) {
+                strutColor = '#e74c3c'; // Red (Error)
+                hasError = true;
+            } else if (kin.is_rib_warning) {
+                strutColor = '#e67e22'; // Orange (Warning - inside buffer)
+            }
+            
+            // Piston line
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(mx, my);
+            ctx.strokeStyle = hasError ? '#e74c3c' : '#7f8c8d';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            // Fixed Cylinder Body
+            const s_dx = mx - bx, s_dy = my - by;
+            const s_len = Math.sqrt(s_dx*s_dx + s_dy*s_dy);
+            const cx = bx + (s_dx / s_len) * 467;
+            const cy = by + (s_dy / s_len) * 467;
+            
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(cx, cy);
+            ctx.strokeStyle = strutColor;
+            ctx.lineWidth = 14;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(mx, my, 6, 0, Math.PI*2);
+            ctx.arc(bx, by, 6, 0, Math.PI*2);
+            ctx.fillStyle = '#f39c12';
+            ctx.fill();
+            
+            ctx.restore();
+            return hasError;
+        }
+
+        function update() {
+            const params = getParams();
+            const angle = parseFloat(document.getElementById('num_angle').value) || 0;
+            const maxAng = parseFloat(limit_max_angle.value) || 92;
+            const kin = calculateKinematics(angle, params);
+            
+            const maxLiftAllowed = parseFloat(limit_lift.value) || 30;
+            const maxPullAllowed = parseFloat(limit_pull.value) || 15;
+            
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            drawMechanism(ctx, canvas.width, canvas.height, params, kin);
+            
+            updateChart(params, maxAng, angle);
+            
+            const min_len = params.ext_length - STROKE_MAX;
+            
+            // Metrics Update
+            current_angle_disp.innerText = angle;
+            
+            const hForce = kin.handle_force_lbs;
+            out_handle_force.innerText = `${hForce > 0 ? 'Lift ' : 'Pull '}${Math.abs(hForce).toFixed(1)} lbs`;
+            
+            let forceWarn = false;
+            if (hForce > maxLiftAllowed || hForce < -maxPullAllowed) {
+                forceWarn = true;
+            }
+            card_handle_force.className = 'metric-card ' + (forceWarn ? 'status-warn' : 'status-ok');
+            
+            val_req_force.innerText = Math.round(kin.required_rated_force);
+            
+            out_length.innerText = `${kin.strut_length.toFixed(1)} mm`;
+            val_min_len.innerText = min_len;
+            val_max_len.innerText = params.ext_length;
+            
+            const geomError = kin.strut_length < min_len || kin.strut_length > params.ext_length;
+            card_length.className = 'metric-card ' + (geomError ? 'status-error' : 'status-ok');
+            
+            const current_stroke = kin.strut_length - min_len;
+            out_stroke.innerText = `${current_stroke.toFixed(1)} mm`;
+            card_stroke.className = 'metric-card ' + (current_stroke < 0 || current_stroke > STROKE_MAX ? 'status-error' : 'status-ok');
+            
+            // Check full range of motion for limits, warning buffers, and binding
+            let maxLiftSeen = 0;
+            let maxPullSeen = 0;
+            let bindAngle = null;
+            let bindType = null;
+            let warnAngle = null;
+
+            for (let a = 0; a <= maxAng; a += 2) {
+                const k = calculateKinematics(a, params);
+                const f = k.handle_force_lbs;
+                if (f > maxLiftSeen) maxLiftSeen = f;
+                if (f < maxPullSeen) maxPullSeen = f;
+                
+                if (k.is_binding && bindAngle === null) {
+                    bindAngle = a;
+                    bindType = k.is_rib_binding ? "lateral rib" : "hinge";
+                }
+                
+                if (k.is_rib_warning && warnAngle === null && bindAngle === null) {
+                    warnAngle = a;
+                }
+            }
+            
+            const liftFailed = maxLiftSeen > maxLiftAllowed;
+            const pullFailed = Math.abs(maxPullSeen) > maxPullAllowed;
+
+            // Human Friendly Status
+            if (kin.strut_length < min_len) {
+                out_status.innerHTML = 'ERROR:<br>Strut Bottoming Out';
+                card_status.style.backgroundColor = 'var(--danger)';
+            } else if (kin.strut_length > params.ext_length) {
+                out_status.innerHTML = 'ERROR:<br>Strut Overextended';
+                card_status.style.backgroundColor = 'var(--danger)';
+            } else if (bindAngle !== null) {
+                out_status.innerHTML = `ERROR:<br>Strut binds on ${bindType}<br>near ${bindAngle}&deg;`;
+                card_status.style.backgroundColor = 'var(--danger)';
+            } else if (warnAngle !== null) {
+                out_status.innerHTML = `WARNING:<br>Strut < 12mm to rib<br>near ${warnAngle}&deg;`;
+                card_status.style.backgroundColor = 'var(--warning)';
+            } else if (liftFailed) {
+                out_status.innerHTML = `EXCEEDS MAX LIFT:<br>Peaks at ${maxLiftSeen.toFixed(1)} lbs`;
+                card_status.style.backgroundColor = 'var(--warning)';
+            } else if (pullFailed) {
+                out_status.innerHTML = `EXCEEDS MAX PULL:<br>Peaks at ${Math.abs(maxPullSeen).toFixed(1)} lbs`;
+                card_status.style.backgroundColor = 'var(--warning)';
+            } else {
+                out_status.innerHTML = 'System OK<br>Within Limits';
+                card_status.style.backgroundColor = 'var(--success)';
+            }
+        }
+
+        // CSV Export functionality
+        document.getElementById('btn_export_csv').addEventListener('click', () => {
+            const params = getParams();
+            const maxAng = parseFloat(limit_max_angle.value) || 92;
+            
+            let csvContent = "data:text/csv;charset=utf-8,";
+            // Header
+            csvContent += "Angle (deg),Lid Mount X (mm),Lid Mount Y (mm),Box Mount X (mm),Box Mount Y (mm),Strut Length (mm),Lever Arm (mm),Rib Clearance (mm),Req Rated Force (N),User Assist (lbs),Binding Status\n";
+            
+            // Generate rows in 1-degree increments
+            for (let a = 0; a <= maxAng; a += 1) {
+                const k = calculateKinematics(a, params);
+                let bindStat = "NO";
+                if (k.is_binding) bindStat = "YES";
+                else if (k.is_rib_warning) bindStat = "WARNING (<12mm)";
+                
+                const reqForceStr = k.required_rated_force === 9999 ? "N/A" : k.required_rated_force.toFixed(1);
+                
+                const row = [
+                    a,
+                    k.mount_x.toFixed(2),
+                    k.mount_y.toFixed(2),
+                    k.box_x.toFixed(2),
+                    k.box_y.toFixed(2),
+                    k.strut_length.toFixed(2),
+                    k.lever_arm.toFixed(2),
+                    k.rib_clearance.toFixed(2),
+                    reqForceStr,
+                    k.handle_force_lbs.toFixed(2),
+                    bindStat
+                ].join(",");
+                
+                csvContent += row + "\n";
+            }
+            
+            // Trigger download
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "vault_kinematics_data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        window.addEventListener('load', () => { initChart(); update(); });
+        window.addEventListener('resize', () => {
+            viewInitialized = false; 
+            update(); 
+        });
+    </script>
+</body>
+</html>
