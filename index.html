@@ -250,7 +250,7 @@
             
             <div class="metric-card" id="card_strut_force">
                 <div class="metric-title">Strut Rating (N)</div>
-                <input type="number" id="quick_rated_force" class="editable-metric" value="900" step="50" title="Edit Strut Rated Force">
+                <input type="number" id="quick_rated_force" class="editable-metric" value="300" step="50" title="Edit Strut Rated Force">
                 <div class="metric-sub" id="req_force_container" title="Force needed to hold lid at current angle">Req for equilibrium:<br><span id="val_req_force" style="font-weight:bold;">--</span> N</div>
             </div>
             
@@ -1003,7 +1003,7 @@
         // CSV Export functionality
         document.getElementById('btn_export_csv').addEventListener('click', () => {
             const params = getParams();
-            const maxAng = parseFloat(limit_max_angle.value) || 92;
+            const maxAng = parseFloat(limit_max_angle.value) || 90;
             
             let csvContent = "data:text/csv;charset=utf-8,";
             // Header
