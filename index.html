@@ -250,7 +250,7 @@
             
             <div class="metric-card" id="card_strut_force">
                 <div class="metric-title">Strut Rating (N)</div>
-                <input type="number" id="quick_rated_force" class="editable-metric" value="300" step="50" title="Edit Strut Rated Force">
+                <input type="number" id="quick_rated_force" class="editable-metric" value="300" step="10" title="Edit Strut Rated Force">
                 <div class="metric-sub" id="req_force_container" title="Force needed to hold lid at current angle">Req for equilibrium:<br><span id="val_req_force" style="font-weight:bold;">--</span> N</div>
             </div>
             
@@ -278,7 +278,7 @@
                     </div>
                     <div class="limit-row">
                         <label for="limit_pull" title="Maximum acceptable pull-down force (lbs)">Max Pull (lbs):</label>
-                        <input type="number" id="limit_pull" class="limit-input" value="6" min="0" step="1">
+                        <input type="number" id="limit_pull" class="limit-input" value="7" min="0" step="1">
                     </div>
                     <div class="limit-row">
                         <label for="limit_max_angle" title="Maximum Opening Angle (°)">Max Angle (°):</label>
@@ -307,20 +307,28 @@
                             <input type="number" id="num_ext_length" value="1050">
                         </div>
                     </div>
+                    
+                    <div class="control-group">
+                        <div class="control-header"><span class="control-label">Lid Thickness (mm)</span></div>
+                        <div class="control-inputs">
+                            <input type="range" id="param_lid_thick" min="0" max="50" step="0.01" value="6.35">
+                            <input type="number" id="num_lid_thick" value="6.35" step="0.01">
+                        </div>
+                    </div>
 
                     <div class="control-group">
                         <div class="control-header"><span class="control-label">Hinge Height (mm)</span></div>
                         <div class="control-inputs">
-                            <input type="range" id="param_hinge_h" min="0" max="100" step="0.1" value="9.2">
-                            <input type="number" id="num_hinge_h" value="9.2" step="0.1">
+                            <input type="range" id="param_hinge_h" min="0" max="100" step="0.01" value="10.07">
+                            <input type="number" id="num_hinge_h" value="10.07" step="0.01">
                         </div>
                     </div>
                     
                     <div class="control-group">
-                        <div class="control-header"><span class="control-label">Rib Depth (mm)</span></div>
+                        <div class="control-header"><span class="control-label">Top to Pivot (mm)</span></div>
                         <div class="control-inputs">
-                            <input type="range" id="param_rib_d" min="0" max="200" step="0.1" value="61">
-                            <input type="number" id="num_rib_d" value="61" step="0.01">
+                            <input type="range" id="param_rib_d" min="0" max="200" step="0.01" value="75.51">
+                            <input type="number" id="num_rib_d" value="75.51" step="0.01">
                         </div>
                     </div>
 
@@ -343,8 +351,8 @@
                     <div class="control-group">
                         <div class="control-header"><span class="control-label">Box Mount Depth (mm)</span></div>
                         <div class="control-inputs">
-                            <input type="range" id="param_box_y" min="100" max="1000" step="1" value="430">
-                            <input type="number" id="num_box_y" value="430" step="0.1">
+                            <input type="range" id="param_box_y" min="100" max="1000" step="1" value="440.5">
+                            <input type="number" id="num_box_y" value="440.5" step="0.1">
                         </div>
                     </div>
 
@@ -506,8 +514,9 @@
 
         // Setup Params
         syncInputs('param_ext_length', 'num_ext_length');
+        syncInputs('param_lid_thick', 'num_lid_thick');
         syncInputs('param_hinge_h', 'num_hinge_h');
-        syncInputs('param_rib_d', 'num_rib_d');
+        syncInputs('param_rib_d', 'num_rib_d'); // Top of lid to pivot distance
         syncInputs('param_lid_x', 'num_lid_x');
         syncInputs('param_box_x', 'num_box_x');
         syncInputs('param_box_y', 'num_box_y');
@@ -517,6 +526,7 @@
             return {
                 rated_force: parseFloat(quick_rated_force.value) || 1900,
                 ext_length: parseFloat(document.getElementById('num_ext_length').value),
+                lid_thick: parseFloat(document.getElementById('num_lid_thick').value),
                 hinge_h: parseFloat(document.getElementById('num_hinge_h').value),
                 rib_d: parseFloat(document.getElementById('num_rib_d').value),
                 lid_x: parseFloat(document.getElementById('num_lid_x').value),
@@ -529,6 +539,9 @@
         function calculateKinematics(angle_deg, params) {
             const theta = angle_deg * (Math.PI / 180);
             const w_N = params.mass * 9.81;
+            
+            // offset_y is the Math Y coordinate of the pivot when angle = 0.
+            // Since top of lid is at -params.hinge_h, and rib_d is distance from top of lid to pivot:
             const offset_y = -params.hinge_h - params.rib_d;
             
             // Mount coordinate (Lid)
@@ -775,18 +788,25 @@
             const lid_y = params.hinge_h;
             
             ctx.beginPath();
-            ctx.rect(0, lid_y, LID_LENGTH, 15);
+            ctx.rect(0, lid_y, LID_LENGTH, params.lid_thick); 
             ctx.fillStyle = '#bdc3c7';
             ctx.fill();
             ctx.strokeStyle = '#7f8c8d';
             ctx.lineWidth = 2;
             ctx.stroke();
             
-            const rib_h = params.rib_d;
-            ctx.beginPath();
-            ctx.rect(params.lid_x - 10, lid_y + 15, 20, rib_h);
-            ctx.fillStyle = '#34495e';
-            ctx.fill();
+            // The rib drops down to the pivot point.
+            // Top of lid is lid_y. Bottom of lid is lid_y + params.lid_thick.
+            // Pivot is at lid_y + params.rib_d. 
+            const rib_top = lid_y + params.lid_thick;
+            const rib_bot = lid_y + params.rib_d;
+            
+            if (rib_bot > rib_top) {
+                ctx.beginPath();
+                ctx.rect(params.lid_x - 10, rib_top, 20, rib_bot - rib_top);
+                ctx.fillStyle = '#34495e';
+                ctx.fill();
+            }
 
             // -- MOVING DIMENSIONS (Lid) --
             ctx.lineWidth = 1;
@@ -794,7 +814,7 @@
             ctx.fillStyle = 'rgba(52, 73, 94, 0.8)';
             
             // Lid Fwd (lid_x)
-            const dim_ly = lid_y - 40;
+            const dim_ly = lid_y - 45;
             ctx.beginPath();
             ctx.moveTo(0, lid_y); ctx.lineTo(0, dim_ly - 10);
             ctx.moveTo(params.lid_x, lid_y); ctx.lineTo(params.lid_x, dim_ly - 10);
@@ -804,23 +824,74 @@
             ctx.stroke();
             ctx.fillText(`Lid Fwd: ${params.lid_x} mm`, params.lid_x / 2, dim_ly - 12);
 
-            // Rib Depth
-            const rib_top = lid_y + 15;
-            const rib_bot = rib_top + params.rib_d;
+            // Strut Rib Depth (Top of lid to Pivot Point)
             const dim_rx = params.lid_x + 40;
+            const top_lid = lid_y;
+            const pivot_y = lid_y + params.rib_d;
             
             ctx.beginPath();
-            ctx.moveTo(params.lid_x + 10, rib_top); ctx.lineTo(dim_rx + 10, rib_top);
-            ctx.moveTo(params.lid_x + 10, rib_bot); ctx.lineTo(dim_rx + 10, rib_bot);
-            ctx.moveTo(dim_rx, rib_top); ctx.lineTo(dim_rx, rib_bot);
-            ctx.moveTo(dim_rx - 5, rib_top + 5); ctx.lineTo(dim_rx + 5, rib_top - 5);
-            ctx.moveTo(dim_rx - 5, rib_bot + 5); ctx.lineTo(dim_rx + 5, rib_bot - 5);
+            ctx.moveTo(params.lid_x + 10, top_lid); ctx.lineTo(dim_rx + 10, top_lid);
+            ctx.moveTo(params.lid_x + 10, pivot_y); ctx.lineTo(dim_rx + 10, pivot_y);
+            ctx.moveTo(dim_rx, top_lid); ctx.lineTo(dim_rx, pivot_y);
+            ctx.moveTo(dim_rx - 5, top_lid + 5); ctx.lineTo(dim_rx + 5, top_lid - 5);
+            ctx.moveTo(dim_rx - 5, pivot_y + 5); ctx.lineTo(dim_rx + 5, pivot_y - 5);
             ctx.stroke();
             
             ctx.save();
-            ctx.translate(dim_rx + 10, (rib_top + rib_bot) / 2);
+            ctx.translate(dim_rx + 10, (top_lid + pivot_y) / 2);
             ctx.rotate(-Math.PI/2);
-            ctx.fillText(`Rib: ${params.rib_d} mm`, 0, -8);
+            ctx.fillText(`Top to Pivot: ${params.rib_d} mm`, 0, -8);
+            ctx.restore();
+
+            // Lid Thickness
+            const thick_x = 150;
+            ctx.beginPath();
+            ctx.moveTo(thick_x, lid_y); ctx.lineTo(thick_x, lid_y + params.lid_thick);
+            ctx.moveTo(thick_x - 5, lid_y); ctx.lineTo(thick_x + 5, lid_y);
+            ctx.moveTo(thick_x - 5, lid_y + params.lid_thick); ctx.lineTo(thick_x + 5, lid_y + params.lid_thick);
+            ctx.stroke();
+            ctx.fillText(`Lid Thick: ${params.lid_thick} mm`, thick_x, lid_y - 8);
+
+            // Hinge Height (Pivot to Lid)
+            const hh_x = -35;
+            ctx.beginPath();
+            ctx.moveTo(0, 0); ctx.lineTo(hh_x - 10, 0);
+            ctx.moveTo(0, lid_y); ctx.lineTo(hh_x - 10, lid_y);
+            ctx.moveTo(hh_x, 0); ctx.lineTo(hh_x, lid_y);
+            ctx.moveTo(hh_x - 5, 5); ctx.lineTo(hh_x + 5, -5);
+            ctx.moveTo(hh_x - 5, lid_y + 5); ctx.lineTo(hh_x + 5, lid_y - 5);
+            ctx.stroke();
+            ctx.save();
+            ctx.translate(hh_x - 5, lid_y / 2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillText(`Hinge Elev: ${params.hinge_h} mm`, 0, -8);
+            ctx.restore();
+
+            // Lateral Rib Callouts
+            // Horizontal Offset (Pivot to Lat Rib)
+            const lat_y = -25;
+            ctx.beginPath();
+            ctx.moveTo(0, 0); ctx.lineTo(0, lat_y - 10);
+            ctx.moveTo(47.23, 0); ctx.lineTo(47.23, lat_y - 10);
+            ctx.moveTo(0, lat_y); ctx.lineTo(47.23, lat_y);
+            ctx.moveTo(-5, lat_y + 5); ctx.lineTo(5, lat_y - 5);
+            ctx.moveTo(47.23 - 5, lat_y + 5); ctx.lineTo(47.23 + 5, lat_y - 5);
+            ctx.stroke();
+            ctx.fillText(`Lat Offset: 47.2 mm`, 47.23 / 2, lat_y - 10);
+
+            // Vertical Depth (Lat Rib Depth)
+            const lat_x = 47.23 + 35;
+            ctx.beginPath();
+            ctx.moveTo(47.23, 0); ctx.lineTo(lat_x + 10, 0);
+            ctx.moveTo(47.23, 65.45); ctx.lineTo(lat_x + 10, 65.45);
+            ctx.moveTo(lat_x, 0); ctx.lineTo(lat_x, 65.45);
+            ctx.moveTo(lat_x - 5, 5); ctx.lineTo(lat_x + 5, -5);
+            ctx.moveTo(lat_x - 5, 65.45 + 5); ctx.lineTo(lat_x + 5, 65.45 - 5);
+            ctx.stroke();
+            ctx.save();
+            ctx.translate(lat_x + 5, 65.45 / 2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillText(`Lat Depth: 65.5 mm`, 0, -8);
             ctx.restore();
 
             // Specific Lateral Rib (47.23 forward, 65.45 down)
@@ -1003,7 +1074,7 @@
         // CSV Export functionality
         document.getElementById('btn_export_csv').addEventListener('click', () => {
             const params = getParams();
-            const maxAng = parseFloat(limit_max_angle.value) || 90;
+            const maxAng = parseFloat(limit_max_angle.value) || 92;
             
             let csvContent = "data:text/csv;charset=utf-8,";
             // Header
